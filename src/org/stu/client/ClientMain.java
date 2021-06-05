@@ -11,6 +11,7 @@ public class ClientMain {
         scanner.nextLine();
 
         Client client = new Client(port);
+        client.execute();
 
     }
 }

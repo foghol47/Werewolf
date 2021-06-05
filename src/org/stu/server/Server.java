@@ -12,10 +12,12 @@ public class Server {
     private ArrayList<PlayerHandler> players;
     private ServerSocket serverSocket;
     private int currentPlayers;
+    private int numberPlayers;
     private final String chatFileName = "chats.txt";
 
     public Server(int port){
         this.port = port;
+        players = new ArrayList<>();
         currentPlayers = 0;
         userNames = new ArrayList<>();
 
@@ -31,11 +33,15 @@ public class Server {
     public void startServer(){
         System.out.println("enter number of players:");
         Scanner scanner = new Scanner(System.in);
-        int playersNumber = scanner.nextInt();
+        numberPlayers = scanner.nextInt();
 
-        while (currentPlayers < playersNumber){
-            try(Socket player = serverSocket.accept()){
-                players.add(new PlayerHandler(this, player));
+        while (currentPlayers < numberPlayers){
+            try{
+                Socket player = serverSocket.accept();
+                PlayerHandler newPlayer = new PlayerHandler(this, player);
+                players.add(newPlayer);
+                new Thread(newPlayer).start();
+
                 currentPlayers++;
             }
             catch (IOException e){
@@ -43,5 +49,25 @@ public class Server {
             }
         }
 
+    }
+
+    public synchronized void incrementPlayer(){
+        currentPlayers++;
+        if (currentPlayers == numberPlayers)
+            notifyPlayers();
+
+    }
+
+    public void notifyPlayers(){
+        for (PlayerHandler handler: players)
+            handler.notify();
+    }
+
+    public boolean isValidUserName(String userName){
+        return !players.contains(userName);
+    }
+
+    public void addUserName(String userName){
+        userNames.add(userName);
     }
 }
