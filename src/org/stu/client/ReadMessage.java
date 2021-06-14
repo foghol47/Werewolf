@@ -24,12 +24,12 @@ public class ReadMessage implements Runnable{
     @Override
     public void run() {
         String input = "";
-        while (!input.equals("!gameover")){
+        while (!input.equals("!exit")){
             try {
                 input = in.readLine();
             }
             catch (IOException e){
-                e.printStackTrace();
+                System.out.println("disconnected from server");
                 break;
             }
             System.out.println(input);
