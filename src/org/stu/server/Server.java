@@ -8,6 +8,11 @@ import java.net.Socket;
 import java.util.*;
 import java.util.concurrent.*;
 
+/**
+ * this class creates a game server
+ *
+ * @author Alireza Jabbari
+ */
 public class Server {
     private int port;
     private ArrayList<String> userNames;
@@ -21,6 +26,11 @@ public class Server {
     private HashMap<PlayerHandler, Integer> playerVotes;
     private PlayerHandler votedPlayer;
 
+    /**
+     * Instantiates a new Server with given port.
+     *
+     * @param port the port of socketServer
+     */
     public Server(int port){
         this.port = port;
         players = new ArrayList<>();
@@ -37,6 +47,9 @@ public class Server {
         }
     }
 
+    /**
+     * executes game server and accept players.
+     */
     public void startServer(){
         System.out.println("enter number of players:");
         Scanner scanner = new Scanner(System.in);
@@ -81,6 +94,13 @@ public class Server {
 
     }
 
+    /**
+     * the loop of game.
+     *
+     * day ----> voting ----> night ----> day ...
+     *
+     * games ended if all mafias killed or number of mafias is greater or equal to number of citizens
+     */
     public void gameLoop(){
         gettingReady();
         createRoles();
@@ -102,6 +122,9 @@ public class Server {
         disconnectPlayers();
     }
 
+    /**
+     * Disconnect players safely after ending game.
+     */
     public void disconnectPlayers(){
         for (PlayerHandler player: players){
             Socket socket = player.getSocket();
@@ -117,6 +140,9 @@ public class Server {
         }
     }
 
+    /**
+     * Show first result of voting.
+     */
     public void showFirstResultVoting(){
         Set<PlayerHandler> votingPlayers = playerVotes.keySet();
         for (PlayerHandler player: votingPlayers){
@@ -134,6 +160,9 @@ public class Server {
 
     }
 
+    /**
+     * Show final result of voting after mayor act.
+     */
     public void showFinalResultVoting(){
         ExecutorService pool = Executors.newCachedThreadPool();
 //        sendMessageToAll(findRolePlayer(new Mayor()), "wait for mayor choice...", false);
@@ -159,11 +188,21 @@ public class Server {
         }
     }
 
+    /**
+     * Vote to a player.
+     *
+     * @param vote voted player
+     */
     public synchronized void vote(PlayerHandler vote){
         int value = playerVotes.get(vote);
         playerVotes.replace(vote, value, value + 1);
     }
 
+    /**
+     * Show day chat history to a player
+     *
+     * @param out the output stream of player
+     */
     public synchronized void showHistory(PrintStream out){
         try (FileInputStream file = new FileInputStream(chatFileName) ) {
             Scanner scanner = new Scanner(file);
@@ -180,6 +219,9 @@ public class Server {
 
 //    public void incrementVote(PlayerHandler )
 
+    /**
+     * Voting phase of game.
+     */
     public void voting(){
         playerVotes = new HashMap<>();
         for (PlayerHandler player: players){
@@ -205,6 +247,9 @@ public class Server {
 
     }
 
+    /**
+     * Cancel voting (called by mayor).
+     */
     public void cancelVoting(){
         votedPlayer = null;
     }
@@ -214,10 +259,20 @@ public class Server {
 //        }
 //    }
 
+    /**
+     * Game over boolean.
+     *
+     * @return if game ended true, otherwise false
+     */
     public boolean gameOver(){
         return mafiaNumber() == 0 || mafiaNumber() >= citizenNumber();
     }
 
+    /**
+     * count current number of mafias in the game
+     *
+     * @return the number of alive mafias
+     */
     public int mafiaNumber(){
         int count = 0;
         for (PlayerHandler player: players){
@@ -226,6 +281,12 @@ public class Server {
         }
         return count;
     }
+
+    /**
+     *  count current number of Citizens in the game
+     *
+     * @return the number of alive Citizens
+     */
     public int citizenNumber(){
         int count = 0;
         for (PlayerHandler player: players){
@@ -235,6 +296,9 @@ public class Server {
         return count;
     }
 
+    /**
+     * Day phase of game
+     */
     public void day(){
         ExecutorService pool = Executors.newCachedThreadPool();
         for (PlayerHandler player: players){
@@ -253,6 +317,9 @@ public class Server {
         }
     }
 
+    /**
+     * "Getting ready" phase.
+     */
     public void gettingReady(){
         ExecutorService pool = Executors.newCachedThreadPool();
         for (PlayerHandler player: players){
@@ -269,6 +336,9 @@ public class Server {
         }
     }
 
+    /**
+     * Create roles of game and set to players.
+     */
     public void createRoles(){
         int mafiaNumber = numberPlayers / 3;
         int citizenNumber = numberPlayers - mafiaNumber;
@@ -302,6 +372,13 @@ public class Server {
     }
 
 
+    /**
+     * Send message to all players.
+     *
+     * @param except      the except player
+     * @param message     the message to be sent
+     * @param savedInFile message saved in file or not
+     */
     public synchronized void sendMessageToAll(PlayerHandler except, String message, boolean savedInFile){
         for (PlayerHandler player: players){
             if (!player.equals(except) && !player.getSocket().isClosed())
@@ -320,6 +397,12 @@ public class Server {
         }
     }
 
+    /**
+     * Find player by role.
+     *
+     * @param role the role of player
+     * @return the player
+     */
     public PlayerHandler findRolePlayer(Role role){
 
         for (PlayerHandler player: players){
@@ -330,6 +413,11 @@ public class Server {
         return null;
     }
 
+    /**
+     * Get mafia team list.
+     *
+     * @return the list of mafias
+     */
     public ArrayList<PlayerHandler> getMafiaTeam(){
         ArrayList<PlayerHandler> mafiaTeam = new ArrayList<>();
         for (PlayerHandler player: players){
@@ -339,6 +427,9 @@ public class Server {
         return mafiaTeam;
     }
 
+    /**
+     * show all player roles at end of game.
+     */
     public void scoreBoard(){
         if (mafiaNumber() == 0)
             sendMessageToAll(null, "game ended\nCitizens won the game.", false);
@@ -376,6 +467,12 @@ public class Server {
 //        return true;
 //    }
 
+    /**
+     * check that a username exists or not
+     *
+     * @param userName the user name to be checked.
+     * @return the valid
+     */
     public synchronized boolean isValidUserName(String userName){
         for (String users: userNames){
             if (users.equals(userName))
@@ -384,6 +481,12 @@ public class Server {
         return true;
     }
 
+    /**
+     * Get players in vote array list.
+     *
+     * @param except the except
+     * @return the array list
+     */
     public ArrayList<PlayerHandler> getPlayersInVote(PlayerHandler except){
         ArrayList<PlayerHandler> options = new ArrayList<>();
         for (PlayerHandler player: players){
@@ -393,10 +496,18 @@ public class Server {
         return options;
     }
 
+    /**
+     * Add user name to the list.
+     *
+     * @param userName the user name to be added.
+     */
     public synchronized void addUserName(String userName){
         userNames.add(userName);
     }
 
+    /**
+     * Increment ready players.
+     */
     public synchronized void incrementReadyPlayers(){
         readyPlayers++;
 

@@ -5,11 +5,22 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
 
+/**
+ * this class used to read all messages from the server.
+ *
+ * @author Alireza Jabbari
+ */
 public class ReadMessage implements Runnable{
     private Socket socket;
     private BufferedReader in;
     private Client client;
 
+    /**
+     * Instantiates a new Read message.
+     *
+     * @param socket the socket
+     * @param client the client
+     */
     public ReadMessage(Socket socket, Client client){
         this.socket = socket;
         try {

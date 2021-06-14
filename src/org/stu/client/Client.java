@@ -2,10 +2,14 @@ package org.stu.client;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.Scanner;
 
 import org.stu.elements.Role;
 
+/**
+ * The client side of game
+ *
+ * @author Alireza Jabbari
+ */
 public class Client {
     private String username;
     private int port;
@@ -16,6 +20,11 @@ public class Client {
     private Thread readMessageThread;
     private Thread writeMessageThread;
 
+    /**
+     * Instantiates a new Client.
+     *
+     * @param port the port
+     */
     public Client(int port){
         this.port = port;
 
@@ -32,12 +41,18 @@ public class Client {
         writeMessageThread = new Thread(new WriteMessage(socket1));
     }
 
+    /**
+     * Executes the client reading and writing message.
+     */
     public void execute(){
         readMessageThread.start();
         writeMessageThread.start();
 
     }
 
+    /**
+     * Stop write message Thread.
+     */
     public void stopWriteMessage(){
         writeMessageThread.stop();
     }

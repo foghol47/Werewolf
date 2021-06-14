@@ -12,6 +12,11 @@ import java.io.PrintStream;
 import java.net.Socket;
 import java.util.ArrayList;
 
+/**
+ * this class controls the players in the game.
+ *
+ * @author Alireza Jabbari
+ */
 public class PlayerHandler implements Runnable{
     private Server server;
     private Socket socket;
@@ -22,6 +27,12 @@ public class PlayerHandler implements Runnable{
     private boolean isAlive;
     private Task task;
 
+    /**
+     * Instantiates a new Player handler.
+     *
+     * @param server the server
+     * @param socket the socket
+     */
     public PlayerHandler(Server server, Socket socket){
         this.server = server;
         this.socket = socket;
@@ -35,26 +46,54 @@ public class PlayerHandler implements Runnable{
         }
     }
 
+    /**
+     * Get socket of client.
+     *
+     * @return the socket of client
+     */
     public Socket getSocket(){
         return socket;
     }
 
+    /**
+     * Get username of player.
+     *
+     * @return username of player
+     */
     public String getUserName(){
         return userName;
     }
 
+    /**
+     * Set task of player.
+     *
+     * @param task the task to be set
+     */
     public void setTask(Task task){
         this.task = task;
     }
 
+    /**
+     * Set role of player.
+     *
+     * @param role the role to be set
+     */
     public void setRole(Role role){
         this.role = role;
     }
 
+    /**
+     * Is alive boolean.
+     *
+     * @return true if player is alive, otherwise false
+     */
     public boolean isAlive(){
         return isAlive;
     }
 
+    /**
+     * Kill a player.
+     */
     public void kill(){
         isAlive = false;
         out.println("are you want watch game or quit the game?");
@@ -76,6 +115,11 @@ public class PlayerHandler implements Runnable{
         }
     }
 
+    /**
+     * Get role of player.
+     *
+     * @return the role of player
+     */
     public Role getRole(){
         return role;
     }
@@ -120,6 +164,12 @@ public class PlayerHandler implements Runnable{
 //            }
 //        }
 //    }
+
+    /**
+     * voting phase of game
+     *
+     * players vote a person to kill and remove it from game
+     */
     public void voting(){
         out.println("its time to vote.");
         if (!isAlive)
@@ -151,6 +201,13 @@ public class PlayerHandler implements Runnable{
 
 
     }
+
+    /**
+     * day phase of game
+     *
+     * in day, players talk to each other to find mafia
+     * it takes 5 minute time or it terminates if all players enter "ready"
+     */
     public void day(){
         out.println("its day. talk to each other.");
         if (!isAlive)
@@ -167,10 +224,17 @@ public class PlayerHandler implements Runnable{
         }
     }
 
+    /**
+     * Notify role of player.
+     */
     public void notifyRoles(){
         out.println("your role is " + role.getClass().getSimpleName() );
 
     }
+
+    /**
+     * this method sends mafia roles for mafia team and sends doctor role for mayor
+     */
     public void familiarRoles(){
         if (role instanceof Mayor){
             String doctorUserName = server.findRolePlayer(new Doctor()).getUserName();
@@ -185,14 +249,28 @@ public class PlayerHandler implements Runnable{
         }
     }
 
+    /**
+     * Receive a message and print for client.
+     *
+     * @param message the message to be received.
+     */
     public void receiveMessage(String message){
         out.println(message);
     }
 
+    /**
+     * Send message to other clients.
+     *
+     * @param message the message to be sent.
+     */
     public void sendMessage(String message){
         server.sendMessageToAll(this, message, true);
     }
 
+    /**
+     * Initial username of player.
+     * usernames cannot be repeated.
+     */
     public void initUserName(){
 
         String userNameTemp = "";
@@ -211,6 +289,9 @@ public class PlayerHandler implements Runnable{
 
     }
 
+    /**
+     * before start of game, players should send "start" to start the game
+     */
     public void gettingReady(){
         out.println("if you ready enter \"start\"");
         String input = "";
@@ -226,6 +307,11 @@ public class PlayerHandler implements Runnable{
         server.incrementReadyPlayers();
     }
 
+    /**
+     * this method call mayor for its act
+     *
+     * mayor can cancel voting.
+     */
     public void mayorAct(){
         if (role instanceof Mayor) {
             out.println("are you want cancel voting? if yes enter 1 and if no enter another number");
@@ -244,10 +330,18 @@ public class PlayerHandler implements Runnable{
 
     }
 
+    /**
+     * show day chat history from file
+     */
     public void showHistory(){
         server.showHistory(out);
     }
 
+    /**
+     * read response of player.
+     *
+     * @return the input of client
+     */
     public String getResponse(){
         String input = "";
         try {
