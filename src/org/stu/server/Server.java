@@ -2,15 +2,10 @@ package org.stu.server;
 
 import org.stu.elements.*;
 
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.PrintStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class Server {
@@ -22,6 +17,9 @@ public class Server {
     private int numberPlayers;
     private int readyPlayers;
     private final String chatFileName = "chats.txt";
+
+    private HashMap<PlayerHandler, Integer> playerVotes;
+    private PlayerHandler votedPlayer;
 
     public Server(int port){
         this.port = port;
@@ -72,7 +70,7 @@ public class Server {
         }
         pool.shutdown();
         try {
-            pool.awaitTermination(30, TimeUnit.SECONDS);
+            pool.awaitTermination(1, TimeUnit.DAYS);
         }
         catch (InterruptedException e){
             e.printStackTrace();
@@ -86,17 +84,129 @@ public class Server {
     public void gameLoop(){
         gettingReady();
         createRoles();
+
+        voting();
+        showFirstResultVoting();
+        showFinalResultVoting();
+
         while (!gameOver()){
             day();
             if (gameOver())
                 break;
             voting();
+            showFirstResultVoting();
+            showFinalResultVoting();
 
+        }
+        scoreBoard();
+        disconnectPlayers();
+    }
+
+    public void disconnectPlayers(){
+        for (PlayerHandler player: players){
+            Socket socket = player.getSocket();
+            if (!socket.isClosed()){
+                player.receiveMessage("!exit");
+                try {
+                    socket.close();
+                }
+                catch (IOException e){
+                    e.printStackTrace();
+                }
+            }
         }
     }
 
-    public void voting(){
+    public void showFirstResultVoting(){
+        Set<PlayerHandler> votingPlayers = playerVotes.keySet();
+        for (PlayerHandler player: votingPlayers){
+            String message = player.getUserName() + " " + playerVotes.get(player) + " votes.";
+            sendMessageToAll(null, message, false);
+        }
+        Iterator<PlayerHandler> iterator = votingPlayers.iterator();
+        PlayerHandler maxVoted = iterator.next();
+        while (iterator.hasNext()){
+            PlayerHandler temp = iterator.next();
+            if (playerVotes.get(temp) > playerVotes.get(maxVoted))
+                maxVoted = temp;
+        }
+        votedPlayer = maxVoted;
 
+    }
+
+    public void showFinalResultVoting(){
+        ExecutorService pool = Executors.newCachedThreadPool();
+//        sendMessageToAll(findRolePlayer(new Mayor()), "wait for mayor choice...", false);
+        for (PlayerHandler player: players){
+            player.setTask(Task.MAYOR_ACT);
+            pool.execute(player);
+        }
+        pool.shutdown();
+        try {
+            if (!pool.awaitTermination(20, TimeUnit.SECONDS))
+                pool.shutdownNow();
+            sendMessageToAll(null, "Time over and voting ended.", false);
+
+        }
+        catch (InterruptedException e){
+            e.printStackTrace();
+        }
+        if (votedPlayer == null)
+            sendMessageToAll(null, "no one removed from game.", false);
+        else {
+            sendMessageToAll(null, votedPlayer.getUserName() + " removed from game.", false);
+            votedPlayer.kill();
+        }
+    }
+
+    public synchronized void vote(PlayerHandler vote){
+        int value = playerVotes.get(vote);
+        playerVotes.replace(vote, value, value + 1);
+    }
+
+    public synchronized void showHistory(PrintStream out){
+        try (FileInputStream file = new FileInputStream(chatFileName) ) {
+            Scanner scanner = new Scanner(file);
+            while (scanner.hasNext()){
+                String temp = scanner.nextLine();
+                out.println(temp);
+            }
+        } catch (FileNotFoundException e) {
+            System.err.println("file not found");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+//    public void incrementVote(PlayerHandler )
+
+    public void voting(){
+        playerVotes = new HashMap<>();
+        for (PlayerHandler player: players){
+            if (player.isAlive())
+                playerVotes.put(player, 0);
+        }
+
+        ExecutorService pool = Executors.newCachedThreadPool();
+        for (PlayerHandler player: players){
+            player.setTask(Task.VOTING);
+            pool.execute(player);
+        }
+        pool.shutdown();
+        try {
+            if (!pool.awaitTermination(40, TimeUnit.SECONDS))
+                pool.shutdownNow();
+            sendMessageToAll(null, "Time over and voting ended.", false);
+
+        }
+        catch (InterruptedException e){
+            e.printStackTrace();
+        }
+
+    }
+
+    public void cancelVoting(){
+        votedPlayer = null;
     }
 //    public void setTask(Task task){
 //        for (PlayerHandler player: players){
@@ -111,7 +221,7 @@ public class Server {
     public int mafiaNumber(){
         int count = 0;
         for (PlayerHandler player: players){
-            if (player.getRole() instanceof Mafia)
+            if (player.getRole() instanceof Mafia && player.isAlive())
                 count++;
         }
         return count;
@@ -119,7 +229,7 @@ public class Server {
     public int citizenNumber(){
         int count = 0;
         for (PlayerHandler player: players){
-            if (player.getRole() instanceof Citizen)
+            if (player.getRole() instanceof Citizen && player.isAlive())
                 count++;
         }
         return count;
@@ -151,7 +261,7 @@ public class Server {
         }
         pool.shutdown();
         try {
-            if (!pool.awaitTermination(10, TimeUnit.SECONDS))
+            if (!pool.awaitTermination(1, TimeUnit.DAYS))
                 pool.shutdownNow();
         }
         catch (InterruptedException e){
@@ -164,11 +274,11 @@ public class Server {
         int citizenNumber = numberPlayers - mafiaNumber;
         ArrayList<Role> roles = new ArrayList<>();
 
-//        roles.add(new GodFather());
+        roles.add(new GodFather());
 //        roles.add(new DrLecter());
 //        roles.add(new OrdinaryMafia());
 
-        roles.add(new Detective());
+//        roles.add(new Detective());
         roles.add(new Doctor());
 //        roles.add(new Sniper());
 //        roles.add(new DieHard());
@@ -181,15 +291,20 @@ public class Server {
         for (PlayerHandler player: players){
             player.setRole(roles.get(0));
             roles.remove(0);
-            player.getRoles();
+            player.notifyRoles();
         }
+
+        for (PlayerHandler player: players){
+            player.familiarRoles();
+        }
+
 
     }
 
 
     public synchronized void sendMessageToAll(PlayerHandler except, String message, boolean savedInFile){
         for (PlayerHandler player: players){
-            if (!player.equals(except))
+            if (!player.equals(except) && !player.getSocket().isClosed())
                 player.receiveMessage(message);
         }
         if (savedInFile) {
@@ -205,14 +320,35 @@ public class Server {
         }
     }
 
-    public String findRoleUserName(Role role){
-        String string = "";
+    public PlayerHandler findRolePlayer(Role role){
+
         for (PlayerHandler player: players){
             if (player.getRole().getClass().equals(role.getClass()))
-                string = player.getUserName();
+                return player;
 
         }
-        return string;
+        return null;
+    }
+
+    public ArrayList<PlayerHandler> getMafiaTeam(){
+        ArrayList<PlayerHandler> mafiaTeam = new ArrayList<>();
+        for (PlayerHandler player: players){
+            if (player.getRole() instanceof Mafia)
+                mafiaTeam.add(player);
+        }
+        return mafiaTeam;
+    }
+
+    public void scoreBoard(){
+        if (mafiaNumber() == 0)
+            sendMessageToAll(null, "game ended\nCitizens won the game.", false);
+        else
+            sendMessageToAll(null, "game ended\nMafias won the game.", false);
+        sendMessageToAll(null, "role names:", false);
+        for (PlayerHandler player: players){
+            sendMessageToAll(null, player.getRole().getClass().getSimpleName() + ": " + player.getUserName(), false);
+        }
+
     }
 
 //    public synchronized void incrementPlayer(){
@@ -246,6 +382,15 @@ public class Server {
                 return false;
         }
         return true;
+    }
+
+    public ArrayList<PlayerHandler> getPlayersInVote(PlayerHandler except){
+        ArrayList<PlayerHandler> options = new ArrayList<>();
+        for (PlayerHandler player: players){
+            if (!player.equals(except))
+                options.add(player);
+        }
+        return options;
     }
 
     public synchronized void addUserName(String userName){

@@ -1,5 +1,5 @@
 package org.stu.server;
 
 public enum Task {
-    INIT_USERNAME, GETTING_READY, DAY
+    NONE, INIT_USERNAME, GETTING_READY, DAY, VOTING, MAYOR_ACT, NIGHT
 }
