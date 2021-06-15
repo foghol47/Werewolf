@@ -157,7 +157,10 @@ public class Server {
             if (playerVotes.get(temp) > playerVotes.get(maxVoted))
                 maxVoted = temp;
         }
-        votedPlayer = maxVoted;
+        if (playerVotes.get(maxVoted) != 0)
+            votedPlayer = maxVoted;
+        else
+            votedPlayer = null;
 
     }
 
@@ -165,6 +168,10 @@ public class Server {
      * Show final result of voting after mayor act.
      */
     public void showFinalResultVoting(){
+        if (votedPlayer == null) {
+            sendMessageToAll(null, "no one removed from game.", false);
+            return;
+        }
         ExecutorService pool = Executors.newCachedThreadPool();
         for (PlayerHandler player: players){
             player.setTask(Task.MAYOR_ACT);
@@ -261,7 +268,7 @@ public class Server {
         }
         pool.shutdown();
         try {
-            if (!pool.awaitTermination(120, TimeUnit.SECONDS))
+            if (!pool.awaitTermination(2, TimeUnit.MINUTES))
                 pool.shutdownNow();
             sendMessageToAll(null, "Time over and night ended.", false);
 
@@ -299,22 +306,26 @@ public class Server {
         }
 
         if (silencedPlayer != null){
-            sendMessageToAll(null, silencedPlayer.getUserName() + " silenced today.", false);
+            sendMessageToAll(null, silencedPlayer.getUserName() + " silenced today.\n", false);
             silencedPlayer.setSilenced(true);
         }
 
         Collections.shuffle(kickedPlayersInNight);
         for (PlayerHandler player: kickedPlayersInNight){
             sendMessageToAll(null, player.getUserName() + " killed tonight.", false);
+            player.kill();
             totalPlayerKicked.add(player);
         }
 
         if (dieHardInquiry) {
             Collections.shuffle(totalPlayerKicked);
-            sendMessageToAll(null, "these roles kicked from game:", false);
+            if (totalPlayerKicked.size() == 0)
+                sendMessageToAll(null, "dieHard inquiry: no one removed from game", false);
+            sendMessageToAll(null, "dieHard inquiry: these roles kicked from game:", false);
             for (PlayerHandler player : totalPlayerKicked){
                 sendMessageToAll(null, player.getRole().getClass().getSimpleName(), false);
             }
+            sendMessageToAll(null, "\n", false);
         }
 
     }
@@ -374,7 +385,7 @@ public class Server {
         }
         pool.shutdown();
         try {
-            if (!pool.awaitTermination(90, TimeUnit.SECONDS))
+            if (!pool.awaitTermination(5, TimeUnit.MINUTES))
                 pool.shutdownNow();
             sendMessageToAll(null, "Time over and day ended.", false);
 

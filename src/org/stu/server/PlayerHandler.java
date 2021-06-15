@@ -154,6 +154,9 @@ public class PlayerHandler implements Runnable{
             case NIGHT:
                 night();
                 break;
+            case KILLED:
+                kill();
+                break;
         }
 
 
@@ -168,7 +171,7 @@ public class PlayerHandler implements Runnable{
      * players vote a person to kill and remove it from game
      */
     public void voting(){
-        out.println("its time to vote.");
+        out.println("** its time to VOTE. **");
         if (!isAlive)
             return;
         ArrayList<PlayerHandler> playersInVote = server.getPlayersInVote(this);
@@ -203,7 +206,10 @@ public class PlayerHandler implements Runnable{
     }
 
     public void night(){
-        out.println("its night...");
+        if (!isAlive)
+            return;
+
+        out.println("** its NIGHT... **");
         if (role instanceof Detective){
             detectiveAct();
         }
@@ -231,7 +237,7 @@ public class PlayerHandler implements Runnable{
      * it takes 5 minute time or it terminates if all players enter "ready"
      */
     public void day(){
-        out.println("its day. talk to each other.");
+        out.println("** its DAY. **\ntalk to each other.");
         if (!isAlive || isSilenced)
             return;
         while (true){
