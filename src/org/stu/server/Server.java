@@ -17,14 +17,22 @@ public class Server {
     private int port;
     private ArrayList<String> userNames;
     private ArrayList<PlayerHandler> players;
+    private ArrayList<PlayerHandler> totalPlayerKicked;
     private ServerSocket serverSocket;
     private int currentPlayers;
     private int numberPlayers;
-    private int readyPlayers;
     private final String chatFileName = "chats.txt";
-
+    //day
     private HashMap<PlayerHandler, Integer> playerVotes;
-    private PlayerHandler votedPlayer;
+    private PlayerHandler votedPlayer = null;
+    //night
+    private ArrayList<PlayerHandler> kickedPlayersInNight;
+    private PlayerHandler shootedPlayer = null;
+    private PlayerHandler drLecterSaved = null;
+    private PlayerHandler sniperTarget = null;
+    private boolean dieHardInquiry = false;
+    private PlayerHandler silencedPlayer = null;
+    private PlayerHandler savedPlayer = null;
 
     /**
      * Instantiates a new Server with given port.
@@ -35,8 +43,8 @@ public class Server {
         this.port = port;
         players = new ArrayList<>();
         currentPlayers = 0;
-        readyPlayers = 0;
         userNames = new ArrayList<>();
+        totalPlayerKicked = new ArrayList<>();
 
         try {
             serverSocket = new ServerSocket(port);
@@ -61,18 +69,8 @@ public class Server {
                 Socket player = serverSocket.accept();
                 PlayerHandler newPlayer = new PlayerHandler(this, player);
                 players.add(newPlayer);
-//                Thread t = new Thread(newPlayer);
                 newPlayer.setTask(Task.INIT_USERNAME);
-//                t.start();
-//                Thread.sleep(1000);
-//                t.stop();
-//                pool.schedule(newPlayer, 5, TimeUnit.SECONDS);
-//                pool.submit(newPlayer);
-//                pool.shutdownNow();
                 pool.execute(newPlayer);
-//                pool.shutdownNow();
-//                pool.awaitTermination(1, TimeUnit.SECONDS);
-
 
 
                 currentPlayers++;
@@ -88,7 +86,6 @@ public class Server {
         catch (InterruptedException e){
             e.printStackTrace();
         }
-        //pool.shutdownNow();
         gameLoop();
 
 
@@ -105,10 +102,6 @@ public class Server {
         gettingReady();
         createRoles();
 
-        voting();
-        showFirstResultVoting();
-        showFinalResultVoting();
-
         while (!gameOver()){
             day();
             if (gameOver())
@@ -116,7 +109,10 @@ public class Server {
             voting();
             showFirstResultVoting();
             showFinalResultVoting();
-
+            if (gameOver())
+                break;
+            night();
+            nightResult();
         }
         scoreBoard();
         disconnectPlayers();
@@ -165,7 +161,6 @@ public class Server {
      */
     public void showFinalResultVoting(){
         ExecutorService pool = Executors.newCachedThreadPool();
-//        sendMessageToAll(findRolePlayer(new Mayor()), "wait for mayor choice...", false);
         for (PlayerHandler player: players){
             player.setTask(Task.MAYOR_ACT);
             pool.execute(player);
@@ -217,7 +212,6 @@ public class Server {
         }
     }
 
-//    public void incrementVote(PlayerHandler )
 
     /**
      * Voting phase of game.
@@ -247,17 +241,85 @@ public class Server {
 
     }
 
+    public void night(){
+        shootedPlayer = null;
+        drLecterSaved = null;
+        sniperTarget = null;
+        dieHardInquiry = false;
+        silencedPlayer = null;
+        savedPlayer = null;
+
+        ExecutorService pool = Executors.newCachedThreadPool();
+        for (PlayerHandler player: players){
+            player.setTask(Task.NIGHT);
+            pool.execute(player);
+        }
+        pool.shutdown();
+        try {
+            if (!pool.awaitTermination(120, TimeUnit.SECONDS))
+                pool.shutdownNow();
+            sendMessageToAll(null, "Time over and night ended.", false);
+
+        }
+        catch (InterruptedException e){
+            e.printStackTrace();
+        }
+    }
+
+    public void nightResult(){
+        kickedPlayersInNight = new ArrayList<>();
+
+        if (shootedPlayer != null){
+            if (!shootedPlayer.equals(savedPlayer)){
+                if (shootedPlayer.getRole() instanceof DieHard){
+                    DieHard dieHard = (DieHard) shootedPlayer.getRole();
+                    if (!dieHard.haveShield())
+                        kickedPlayersInNight.add(shootedPlayer);
+                    else
+                        dieHard.useShield();
+                }
+            }
+        }
+
+        if (sniperTarget != null){
+            if (sniperTarget.getRole() instanceof Citizen){
+                PlayerHandler sniper = findRolePlayer(new Sniper());
+                kickedPlayersInNight.add(sniper);
+            }
+            else {
+                if (!sniperTarget.equals(drLecterSaved)){
+                    kickedPlayersInNight.add(sniperTarget);
+                }
+            }
+        }
+
+        if (silencedPlayer != null){
+            sendMessageToAll(null, silencedPlayer.getUserName() + " silenced today.", false);
+            silencedPlayer.setSilenced(true);
+        }
+
+        Collections.shuffle(kickedPlayersInNight);
+        for (PlayerHandler player: kickedPlayersInNight){
+            sendMessageToAll(null, player.getUserName() + " killed tonight.", false);
+            totalPlayerKicked.add(player);
+        }
+
+        if (dieHardInquiry) {
+            Collections.shuffle(totalPlayerKicked);
+            sendMessageToAll(null, "these roles kicked from game:", false);
+            for (PlayerHandler player : totalPlayerKicked){
+                sendMessageToAll(null, player.getRole().getClass().getSimpleName(), false);
+            }
+        }
+
+    }
+
     /**
      * Cancel voting (called by mayor).
      */
     public void cancelVoting(){
         votedPlayer = null;
     }
-//    public void setTask(Task task){
-//        for (PlayerHandler player: players){
-//            player.setTask(task);
-//        }
-//    }
 
     /**
      * Game over boolean.
@@ -307,7 +369,7 @@ public class Server {
         }
         pool.shutdown();
         try {
-            if (!pool.awaitTermination(40, TimeUnit.SECONDS))
+            if (!pool.awaitTermination(90, TimeUnit.SECONDS))
                 pool.shutdownNow();
             sendMessageToAll(null, "Time over and day ended.", false);
 
@@ -345,16 +407,16 @@ public class Server {
         ArrayList<Role> roles = new ArrayList<>();
 
         roles.add(new GodFather());
-//        roles.add(new DrLecter());
-//        roles.add(new OrdinaryMafia());
+        roles.add(new DrLecter());
+        roles.add(new OrdinaryMafia());
 
-//        roles.add(new Detective());
+        roles.add(new Detective());
         roles.add(new Doctor());
-//        roles.add(new Sniper());
-//        roles.add(new DieHard());
-//        roles.add(new Psychologist());
+        roles.add(new Sniper());
+        roles.add(new DieHard());
+        roles.add(new Psychologist());
         roles.add(new Mayor());
-        roles.add(new OrdinaryCitizen());
+//        roles.add(new OrdinaryCitizen());
 
         Collections.shuffle(roles);
 
@@ -366,6 +428,7 @@ public class Server {
 
         for (PlayerHandler player: players){
             player.familiarRoles();
+            System.out.println(player.getUserName() + ": " + player.getRole().getClass().getSimpleName());
         }
 
 
@@ -442,31 +505,6 @@ public class Server {
 
     }
 
-//    public synchronized void incrementPlayer(){
-//        currentPlayers++;
-//        if (currentPlayers == numberPlayers)
-//            notifyPlayers();
-//
-//    }
-
-//    public void notifyPlayers(){
-//        for (PlayerHandler handler: players)
-//            new Thread(handler).notify();
-//    }
-
-
-//    public boolean allPlayersFinished(PlayerHandler except){
-//        if (currentPlayers != numberPlayers)
-//            return false;
-//        for (PlayerHandler handler: players){
-//            if (handler.equals(except))
-//                continue;
-//            if (!handler.getTaskFinished())
-//                return false;
-//        }
-//        return true;
-//    }
-
     /**
      * check that a username exists or not
      *
@@ -490,7 +528,7 @@ public class Server {
     public ArrayList<PlayerHandler> getPlayersInVote(PlayerHandler except){
         ArrayList<PlayerHandler> options = new ArrayList<>();
         for (PlayerHandler player: players){
-            if (!player.equals(except))
+            if (!player.equals(except) && player.isAlive())
                 options.add(player);
         }
         return options;
@@ -505,11 +543,71 @@ public class Server {
         userNames.add(userName);
     }
 
-    /**
-     * Increment ready players.
-     */
-    public synchronized void incrementReadyPlayers(){
-        readyPlayers++;
 
+    /**
+     * Set shooted player.
+     *
+     * @param target the target
+     */
+    public void setShootedPlayer(PlayerHandler target){
+        shootedPlayer = target;
+    }
+
+    /**
+     * Set dr lecter save.
+     *
+     * @param target the target
+     */
+    public void setDrLecterSaved(PlayerHandler target){
+        drLecterSaved = target;
+    }
+
+    /**
+     * Set sniper target.
+     *
+     * @param target the target
+     */
+    public void setSniperTarget(PlayerHandler target){
+        sniperTarget = target;
+    }
+
+    /**
+     * Set die hard inquiry.
+     *
+     * @param dieHardInquiry the die hard inquiry
+     */
+    public void setDieHardInquiry(boolean dieHardInquiry){
+        this.dieHardInquiry = dieHardInquiry;
+    }
+
+    /**
+     * Set silenced player.
+     *
+     * @param target the target
+     */
+    public void setSilencedPlayer(PlayerHandler target){
+        silencedPlayer = target;
+    }
+
+    /**
+     * Set saved player.
+     *
+     * @param target the target
+     */
+    public void setSavedPlayer(PlayerHandler target){
+        savedPlayer = target;
+    }
+
+    /**
+     * Send message to mafia team.
+     *
+     * @param except  the except Player
+     * @param message the message to be sent
+     */
+    public void sendMessageToMafias(PlayerHandler except, String message){
+        for (PlayerHandler player: players){
+            if (player.getRole() instanceof Mafia && !player.equals(except) && player.isAlive())
+                player.receiveMessage(message);
+        }
     }
 }

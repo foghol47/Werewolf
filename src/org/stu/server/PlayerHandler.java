@@ -1,9 +1,6 @@
 package org.stu.server;
 
-import org.stu.elements.Mafia;
-import org.stu.elements.Mayor;
-import org.stu.elements.Doctor;
-import org.stu.elements.Role;
+import org.stu.elements.*;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -26,6 +23,7 @@ public class PlayerHandler implements Runnable{
     private Role role;
     private boolean isAlive;
     private Task task;
+    private boolean isSilenced = false;
 
     /**
      * Instantiates a new Player handler.
@@ -91,6 +89,10 @@ public class PlayerHandler implements Runnable{
         return isAlive;
     }
 
+    public void setSilenced(boolean isSilenced){
+        this.isSilenced = isSilenced;
+    }
+
     /**
      * Kill a player.
      */
@@ -100,8 +102,10 @@ public class PlayerHandler implements Runnable{
         out.println("1) watch");
         out.println("2) quit");
         try {
-            String input = getResponse().trim();
-            int choice = Integer.parseInt(input);
+            String input = getResponse();
+            if (input == null)
+                return;
+            int choice = Integer.parseInt(input.trim());
             if (choice == 2){
                 out.println("!exit");
                 socket.close();
@@ -139,12 +143,16 @@ public class PlayerHandler implements Runnable{
                 break;
             case DAY:
                 day();
+                isSilenced = false;
                 break;
             case VOTING:
                 voting();
                 break;
             case MAYOR_ACT:
                 mayorAct();
+                break;
+            case NIGHT:
+                night();
                 break;
         }
 
@@ -153,17 +161,6 @@ public class PlayerHandler implements Runnable{
 
 
     }
-
-//    public synchronized void setStateWaiting(){
-//        if (!server.allPlayersFinished(this)){
-//            try {
-//                Thread.currentThread().wait();
-//            }
-//            catch (InterruptedException e){
-//                e.printStackTrace();
-//            }
-//        }
-//    }
 
     /**
      * voting phase of game
@@ -184,15 +181,18 @@ public class PlayerHandler implements Runnable{
         int choice = -1;
         do {
             try {
-                String input = getResponse().trim();
-                if (!task.equals(Task.VOTING))
+                String input = getResponse();
+                if (!task.equals(Task.VOTING) || input == null)
                     return;
-                choice = Integer.parseInt(input);
+                choice = Integer.parseInt(input.trim());
 
                 if (choice < 0 || choice > playersInVote.size())
                     out.println("wrong input. try again");
-                else if (choice != 0)
-                    server.vote(playersInVote.get(choice - 1));
+                else if (choice != 0) {
+                    PlayerHandler selectedPlayer = playersInVote.get(choice - 1);
+                    server.vote(selectedPlayer);
+                    server.sendMessageToAll(this, userName + " voted to " + selectedPlayer.getUserName(), false);
+                }
             }
             catch (NumberFormatException e){
                 out.println("wrong input. try again");
@@ -200,6 +200,28 @@ public class PlayerHandler implements Runnable{
         }while (choice < 0 || choice > playersInVote.size());
 
 
+    }
+
+    public void night(){
+        out.println("its night...");
+        if (role instanceof Detective){
+            detectiveAct();
+        }
+        else if (role instanceof Mafia){
+            mafiaAct();
+        }
+        else if (role instanceof Sniper){
+            sniperAct();
+        }
+        else if (role instanceof DieHard){
+            dieHardAct();
+        }
+        else if (role instanceof Psychologist){
+            psychologistAct();
+        }
+        else if (role instanceof Doctor){
+            doctorAct();
+        }
     }
 
     /**
@@ -210,14 +232,14 @@ public class PlayerHandler implements Runnable{
      */
     public void day(){
         out.println("its day. talk to each other.");
-        if (!isAlive)
+        if (!isAlive || isSilenced)
             return;
         while (true){
 
             String message = userName + ": ";
             String input = getResponse();
-            if (!task.equals(Task.DAY) || input.equals("ready"))
-                break;
+            if (!task.equals(Task.DAY) || input == null || input.equals("ready"))
+                return;
             message += input;
             server.sendMessageToAll(this, message, true);
 
@@ -237,14 +259,18 @@ public class PlayerHandler implements Runnable{
      */
     public void familiarRoles(){
         if (role instanceof Mayor){
-            String doctorUserName = server.findRolePlayer(new Doctor()).getUserName();
+            PlayerHandler doctor = server.findRolePlayer(new Doctor());
+            if (doctor == null){
+                out.println("we have no doctor in game.");
+            }
+            String doctorUserName = doctor.getUserName();
             out.println("Doctor is " + doctorUserName);
         }
         else if (role instanceof Mafia){
             out.println("mafia members:");
             ArrayList<PlayerHandler> mafiaTeam = server.getMafiaTeam();
             for (PlayerHandler mafia: mafiaTeam){
-                out.println(mafia.getClass().getSimpleName() + ": " + mafia.getUserName());
+                out.println(mafia.getRole().getClass().getSimpleName() + ": " + mafia.getUserName());
             }
         }
     }
@@ -297,14 +323,14 @@ public class PlayerHandler implements Runnable{
         String input = "";
         do {
 
-            input = getResponse().toLowerCase();
-            if (!task.equals(Task.GETTING_READY))
-                break;
-            if (!input.equals("start"))
+            input = getResponse();
+            if (!task.equals(Task.GETTING_READY) || input == null)
+                return;
+            if (!input.toLowerCase().equals("start"))
                 out.println("wrong input. try again");
 
-        }while (!input.equals("start"));
-        server.incrementReadyPlayers();
+        }while (!input.toLowerCase().equals("start"));
+
     }
 
     /**
@@ -317,6 +343,8 @@ public class PlayerHandler implements Runnable{
             out.println("are you want cancel voting? if yes enter 1 and if no enter another number");
             try {
                 String input = getResponse();
+                if (!task.equals(Task.MAYOR_ACT) || input == null)
+                    return;
                 int choice = Integer.parseInt(input);
                 if (choice == 1)
                     server.cancelVoting();
@@ -327,6 +355,198 @@ public class PlayerHandler implements Runnable{
         }
         else
             out.println("wait for mayor...");
+
+    }
+
+    public void mafiaAct(){
+        ArrayList<PlayerHandler> players = server.getPlayersInVote(this);
+        int i = 1;
+        for (PlayerHandler player: players){
+            out.println(i + ") " + player.getUserName() );
+            i++;
+        }
+        out.println("enter number of player to shoot him:");
+        int choice = 0;
+        do {
+            String input = getResponse();
+            if (!task.equals(Task.NIGHT) || input == null)
+                return;
+            choice = Integer.parseInt(input.trim());
+            if (choice < 1 || choice > players.size()){
+                out.println("wrong input. try again");
+            }
+        }while(choice < 1 || choice > players.size());
+
+        PlayerHandler selectedPlayer = players.get(choice - 1);
+        server.sendMessageToMafias(this, userName + " selected " + selectedPlayer.getUserName());
+
+        if (role instanceof GodFather){
+            server.setShootedPlayer(selectedPlayer);
+        }
+        else if (role instanceof DrLecter){
+            if (!server.findRolePlayer(new GodFather()).isAlive())
+                server.setShootedPlayer(selectedPlayer);
+            drLecterAct();
+        }
+        else{
+            if (!server.findRolePlayer(new GodFather()).isAlive() && !server.findRolePlayer(new DrLecter()).isAlive())
+                server.setShootedPlayer(selectedPlayer);
+        }
+
+    }
+
+    public void drLecterAct(){
+        DrLecter drLecter = (DrLecter) role;
+
+        ArrayList<PlayerHandler> mafiaTeam = server.getMafiaTeam();
+        int i = 1;
+        for (PlayerHandler player: mafiaTeam){
+            out.println(i + ") " + player.getUserName() );
+            i++;
+        }
+        out.println("enter number of player to save him:");
+        int choice = 0;
+        PlayerHandler selectedPlayer = null;
+        do {
+            String input = getResponse();
+            if (!task.equals(Task.NIGHT) || input == null)
+                return;
+            choice = Integer.parseInt(input.trim());
+            if (choice < 1 || choice > mafiaTeam.size()){
+                out.println("wrong input. try again");
+            }
+            else {
+                selectedPlayer = mafiaTeam.get(choice - 1);
+                if (selectedPlayer.equals(this) ){
+                    if (drLecter.isSavedHimself()){
+                        out.println("you saved your self previous. select another person");
+                        continue;
+                    }
+                    else
+                        drLecter.setSavedHimself(true);
+                }
+            }
+        }while(choice < 1 || choice > mafiaTeam.size());
+
+        server.setDrLecterSaved(selectedPlayer);
+    }
+
+    public void detectiveAct(){
+        ArrayList<PlayerHandler> players = server.getPlayersInVote(this);
+        int i = 1;
+        for (PlayerHandler player: players){
+            out.println(i + ") " + player.getUserName() );
+            i++;
+        }
+        out.println("enter number of player to detect its role:");
+        int choice = 0;
+        do {
+            String input = getResponse();
+            if (!task.equals(Task.NIGHT) || input == null)
+                return;
+            choice = Integer.parseInt(input.trim());
+            if (choice < 1 || choice > players.size()){
+                out.println("wrong input. try again");
+            }
+        }while(choice < 1 || choice > players.size());
+        PlayerHandler selectedPlayer = players.get(choice - 1);
+        if (selectedPlayer.getRole() instanceof Citizen || selectedPlayer.getRole() instanceof GodFather){
+            out.println(selectedPlayer.getUserName() + " is a citizen.");
+        }
+        else{
+            out.println(selectedPlayer.getUserName() + " is a Mafia.");
+        }
+    }
+
+    public void doctorAct(){
+        ArrayList<PlayerHandler> players = server.getPlayersInVote(null);
+        int i = 1;
+        for (PlayerHandler player: players){
+            out.println(i + ") " + player.getUserName() );
+            i++;
+        }
+        out.println("enter number of player to save him:");
+        int choice = 0;
+        do {
+            String input = getResponse();
+            if (!task.equals(Task.NIGHT) || input == null)
+                return;
+            choice = Integer.parseInt(input.trim());
+            if (choice < 1 || choice > players.size()){
+                out.println("wrong input. try again");
+            }
+        }while(choice < 1 || choice > players.size());
+        PlayerHandler selectedPlayer = players.get(choice - 1);
+
+        server.setSavedPlayer(selectedPlayer);
+    }
+
+    public void dieHardAct(){
+        DieHard dieHard = (DieHard) role;
+        if (dieHard.haveInquiry()){
+            out.println("if you want inquiry enter 1 and if not enter 0.");
+            String input = getResponse();
+            if (!task.equals(Task.NIGHT) || input == null)
+                return;
+            int choice = Integer.parseInt(input.trim());
+
+            if (choice == 1){
+                server.setDieHardInquiry(true);
+                dieHard.useInquiry();
+            }
+        }
+    }
+
+    public void psychologistAct(){
+        ArrayList<PlayerHandler> players = server.getPlayersInVote(this);
+        int i = 1;
+        for (PlayerHandler player: players){
+            out.println(i + ") " + player.getUserName() );
+            i++;
+        }
+        out.println("enter number of player to silent him:");
+        out.println("if you dont want no one silenced enter 0");
+        int choice = -1;
+        do {
+            String input = getResponse();
+            if (!task.equals(Task.NIGHT) || input == null)
+                return;
+            choice = Integer.parseInt(input.trim());
+            if (choice < 0 || choice > players.size()){
+                out.println("wrong input. try again");
+            }
+            else if (choice == 0)
+                return;
+        }while(choice < 0 || choice > players.size());
+        PlayerHandler selectedPlayer = players.get(choice - 1);
+
+        server.setSilencedPlayer(selectedPlayer);
+    }
+
+    public void sniperAct(){
+        ArrayList<PlayerHandler> players = server.getPlayersInVote(this);
+        int i = 1;
+        for (PlayerHandler player: players){
+            out.println(i + ") " + player.getUserName() );
+            i++;
+        }
+        out.println("enter number of player to shoot him:");
+        out.println("note: if you select a citizen you will killed. if you dont want shoot anyone enter 0");
+        int choice = -1;
+        do {
+            String input = getResponse();
+            if (!task.equals(Task.NIGHT) || input == null)
+                return;
+            choice = Integer.parseInt(input.trim());
+            if (choice < 0 || choice > players.size()){
+                out.println("wrong input. try again");
+            }
+            else if (choice == 0)
+                return;
+        }while(choice < 0 || choice > players.size());
+        PlayerHandler selectedPlayer = players.get(choice - 1);
+
+        server.setSniperTarget(selectedPlayer);
 
     }
 
@@ -351,16 +571,19 @@ public class PlayerHandler implements Runnable{
                     out.println("!exit");
                     isAlive = false;
                     socket.close();
+                    //return null;
                 }
                 else if (input.equals("history")){
                     showHistory();
                 }
 
-            }while (!input.equals("exit") && !input.equals("history"));
+            }while (input.equals("exit") || input.equals("history"));
 
         }
         catch (IOException e){
             System.out.println(userName + " disconnected.");
+            isAlive = false;
+            return null;
         }
         return input;
     }
