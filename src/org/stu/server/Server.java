@@ -61,7 +61,12 @@ public class Server {
     public void startServer(){
         System.out.println("enter number of players:");
         Scanner scanner = new Scanner(System.in);
-        numberPlayers = scanner.nextInt();
+        numberPlayers = 0;
+        while (numberPlayers < 6) {
+            numberPlayers = scanner.nextInt();
+            if (numberPlayers < 6)
+                System.out.println("wrong input");
+        }
         ExecutorService pool = Executors.newCachedThreadPool();
 
         while (currentPlayers < numberPlayers){
@@ -403,20 +408,29 @@ public class Server {
      */
     public void createRoles(){
         int mafiaNumber = numberPlayers / 3;
-        int citizenNumber = numberPlayers - mafiaNumber;
+
         ArrayList<Role> roles = new ArrayList<>();
 
         roles.add(new GodFather());
-        roles.add(new DrLecter());
-        roles.add(new OrdinaryMafia());
+        if (numberPlayers > 6)
+            roles.add(new DrLecter());
+        while (roles.size() < mafiaNumber)
+            roles.add(new OrdinaryMafia());
 
         roles.add(new Detective());
         roles.add(new Doctor());
-        roles.add(new Sniper());
         roles.add(new DieHard());
-        roles.add(new Psychologist());
-        roles.add(new Mayor());
-//        roles.add(new OrdinaryCitizen());
+
+        if (numberPlayers > 6) {
+            roles.add(new Sniper());
+            roles.add(new Mayor());
+        }
+
+        if (numberPlayers > 8)
+            roles.add(new Psychologist());
+
+        while (roles.size() < numberPlayers)
+            roles.add(new OrdinaryCitizen());
 
         Collections.shuffle(roles);
 
