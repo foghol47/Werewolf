@@ -43,7 +43,10 @@ public class ReadMessage implements Runnable{
                 System.out.println("disconnected from server");
                 break;
             }
-            System.out.println(input);
+            if (input.equals("!exit"))
+                System.out.println("goodbye! press enter");
+            else
+                System.out.println(input);
         }
         client.stopWriteMessage();
     }
